@@ -48,7 +48,7 @@ Windows (PowerShell):
 
 ## 🏃 Usage
 
-### Run the Application
+### 1. Run the Application
 
 Launch TermPaper instantly inside the managed environment:
 
