@@ -35,7 +35,10 @@ Windows (PowerShell):
 ## 🛠️ Installation & Setup
 
 1. Clone the repository:
-   ```git clone [https://github.com/y3script/TermPaper.git](https://www.google.com/search?q=https://github.com/y3script/TermPaper.git) cd TermPaper```
+```bash
+   git clone https://github.com/y3script/TermPaper.git
+   cd TermPaper
+```
 
 2. Sync and create virtual environment:
    uv automatically manages environments and dependencies specified in pyproject.toml / uv.lock.
