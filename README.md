@@ -27,10 +27,15 @@ Ensure you have uv installed. If you don't have it yet:
 macOS / Linux:
 
 
-```curl -LsSf https://astral.sh/uv/install.sh | sh```
+```bash
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
 Windows (PowerShell):
-```powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"```
+
+```bash
+   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
 
 ## 🛠️ Installation & Setup
 
