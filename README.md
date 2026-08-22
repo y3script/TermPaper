@@ -39,10 +39,9 @@ Windows (PowerShell):
 
 2. Sync and create virtual environment:
    uv automatically manages environments and dependencies specified in pyproject.toml / uv.lock.
-   
-   ```bash```
+```bash
    uv sync
-   ```
+```
 
 ## 🏃 Usage
 
@@ -70,6 +69,14 @@ uv run tp ui -p 8080 -t
 
 - Pillow – Image processing & dynamic icon generation
 
-## 📄 License
+## 🌐 Connect With the Developer
 
-Distributed under the MIT License. See LICENSE for more information.
+If you like this project or want to check out more web, app, and terminal-based software engineering projects, follow me here:
+
+- **GitHub:** [@y3script](https://github.com/y3script)
+
+- **Instagram:** [@yescript](https://instagram.com/yescript)
+
+
+
+Made with 🐍, 💻, and a deep love for coding.
