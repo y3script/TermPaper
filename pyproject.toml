@@ -1,0 +1,26 @@
+[project]
+name = "termpaper"
+version = "0.1.0"
+description = "Terminal-first desktop wallpaper manager with an optional web interface."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "flask>=3.1.3",
+    "pillow>=12.3.0",
+    "pystray>=0.19.5",
+    "requests>=2.34.2",
+    "rich>=15.0.0",
+    "textual>=8.2.8",
+    "typer>=0.27.1",
+]
+
+[project.scripts]
+termpaper = "cli.main:app"
+tp = "cli.main:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cli"]
