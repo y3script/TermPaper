@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw
 import base64
 import io
 
+
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
 
