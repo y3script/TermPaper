@@ -12,6 +12,7 @@ import requests
 import typer
 from rich.console import Console
 from rich.panel import Panel
+from rich.text import Text
 from rich.progress import (
     BarColumn,
     DownloadColumn,
@@ -534,6 +535,7 @@ def rotate(
             rotator.stop()
             console.print("\n[bold yellow]⏹ Wallpaper rotation stopped.[/bold yellow]")
 
+
 @app.command(
     epilog="""
 [bold yellow]Examples:[/bold yellow]
@@ -568,11 +570,45 @@ def ui(
     [bold green]Launch the TermPaper Web Gallery in your browser.[/bold green]
     """
     if tray:
-        console.print("[bold cyan]📌 Starting TermPaper Web UI in System Tray mode...[/bold cyan]")
+        console.print(
+            "[bold cyan]📌 Starting TermPaper Web UI in System Tray mode...[/bold cyan]"
+        )
     else:
-        console.print(f"[bold cyan]🌐 Starting TermPaper Web UI at:[/bold cyan] [yellow]http://{host}:{port}[/yellow]")
+        console.print(
+            f"[bold cyan]🌐 Starting TermPaper Web UI at:[/bold cyan] [yellow]http://{host}:{port}[/yellow]"
+        )
 
     start_web_ui(host=host, port=port, tray=tray)
+
+
+@app.command(
+    epilog="""
+[bold yellow]Examples:[/bold yellow]
+  $ tp about                  # View developer info and social links
+"""
+)
+def about():
+    """
+    [bold green]Display developer information and social links.[/bold green]
+    """
+    about_text = Text.from_markup(
+        "[bold yellow]>[/bold yellow] [bold cyan]AUTHOR:[/bold cyan] y3script\n"
+        "[bold yellow]>[/bold yellow] [bold cyan]ROLE  :[/bold cyan] Python Freelance Engineer\n"
+        "[bold yellow]>[/bold yellow] [bold cyan]SKILLS:[/bold cyan] Flask | Tkinter | TUI | Workflow Automation\n\n"
+        "  Building tailored software tools to scale business efficiency.\n"
+        "  Contact via Instagram DM for custom project inquiries.\n\n"
+        "  [dim]•[/dim] GitHub    : [link=https://github.com/y3script]github.com/y3script[/link]\n"
+        "  [dim]•[/dim] Instagram : [link=https://instagram.com/yescript]@yescript[/link]"
+    )
+
+    panel = Panel(
+        about_text,
+        title="[bold yellow]Developer Profile[/bold yellow]",
+        border_style="cyan",
+        expand=False,
+    )
+    console.print(panel)
+
 
 @app.command(
     epilog="""
