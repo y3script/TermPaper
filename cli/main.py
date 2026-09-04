@@ -149,7 +149,32 @@ def set_desktop_wallpaper(image_path: Path) -> bool:
                     check=True,
                 )
                 return True
-
+            if "xfce" in desktop:
+                # XFCE uses xfconf-query and requires a standard file path
+                try:
+                    result = subprocess.run(
+                        ["xfconf-query", "-c", "xfce4-desktop", "-l"],
+                        stdout=subprocess.PIPE,
+                        text=True,
+                        check=True,
+                    )
+                    for prop in result.stdout.splitlines():
+                        if prop.endswith(("last-image", "image-path")):
+                            subprocess.run(
+                                [
+                                    "xfconf-query",
+                                    "-c",
+                                    "xfce4-desktop",
+                                    "-p",
+                                    prop,
+                                    "-s",
+                                    str(resolved_path),
+                                ],
+                                check=False,
+                            )
+                    return True
+                except Exception:
+                    pass
             if shutil.which("swww"):
                 subprocess.run(["swww", "img", str(resolved_path)], check=True)
                 return True

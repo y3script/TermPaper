@@ -1,18 +1,18 @@
+import base64
+import logging
 import os
-from pathlib import Path
 import sqlite3
+import sys
+import threading
 import webbrowser
+from pathlib import Path
 from typing import Any, Dict
 
-from PIL import Image, ImageDraw
-import pystray
-import threading
-import base64
-import io
-
-from flask import Flask, jsonify, render_template_string, request, Response,cli
-import logging
 import requests
+from flask import Flask, Response, cli, jsonify, render_template_string, request
+from PyQt6.QtCore import QByteArray
+from PyQt6.QtGui import QColor, QIcon, QPixmap
+from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from core.rotator import set_desktop_wallpaper
 
@@ -58,6 +58,8 @@ def init_db():
 init_db()
 
 HTML_TEMPLATE = r"""
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -738,9 +740,7 @@ def check_favorite():
         return jsonify({"is_favorite": False})
 
     conn = get_db_connection()
-    row = conn.execute(
-        "SELECT 1 FROM favorites WHERE id = ?", (wp_id,)
-    ).fetchone()
+    row = conn.execute("SELECT 1 FROM favorites WHERE id = ?", (wp_id,)).fetchone()
     conn.close()
 
     return jsonify({"is_favorite": row is not None})
@@ -784,13 +784,13 @@ def remove_favorite():
     conn.close()
     return jsonify({"status": "success", "message": "Removed from favorites"})
 
+
 @app.route("/api/proxy_image")
 def proxy_image():
     image_url = request.args.get("url")
     if not image_url:
         return "Missing URL", 400
     try:
-        # Pass a standard User-Agent and clear referrers
         headers = {"User-Agent": "Mozilla/5.0"}
         res = requests.get(image_url, headers=headers, stream=True, timeout=15.0)
         res.raise_for_status()
@@ -800,6 +800,7 @@ def proxy_image():
         )
     except Exception as e:
         return str(e), 500
+
 
 @app.route("/api/set", methods=["POST"])
 def api_set():
@@ -823,36 +824,42 @@ def api_set():
                         f.write(chunk)
 
         if set_desktop_wallpaper(file_path):
-            return jsonify({"status": "success", "message": f"Applied wallpaper {file_path.name}!"})
+            return jsonify(
+                {"status": "success", "message": f"Applied wallpaper {file_path.name}!"}
+            )
         return jsonify({"status": "error", "message": "Failed to set wallpaper."}), 500
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+def create_tray_icon() -> QIcon:
+    """Decodes a clean Base64 string into a QIcon, falling back to a drawn icon if decoding fails."""
+    # Valid Base64 PNG icon payload
+    icon_base64 = (
+        "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAAAgVBMVEVHcExoE+FnE+FnE+FnE+FmE+FrFuFiD+FoE+FfDeFxGuH///9kEeFyGuFnE+FtFuFhD+FvGOF1HOF+IuF4HuF7IOFqFeGCJeKGJ+KKKuLStfZfDeGxg++1h++9jfDbxPiBMeT28P2gZOv9+//t4fyNQOaXU+nk0/qqdu7NrvXAlvLOhlZVAAAAC3RSTlMA1ziQIQG07+VsbH0U4VAAAAP2SURBVFjDlZfpdqowAISDINjWsIQgLigBBYH3f8CbfWGpvfOj51QyHzOJEQKA0j74Cr0ovVGlG+LXIi/8CvZgrv3OP/ABm27DuN0O/m6GCPzo9ge7QUR+YPt33sJ+nGmBCHcL/6Z5ARE9dq7/k9tlMIcnCYHtP36UTRDz4K/bY0erKVKfrcUuUv4t8xKiQkS0xN6X/g/uGUMiaITg4PrjD3IIt0MAvpz4s7bL/uZf4fsC4cwek3aoNjS0JJ4hQuA5/pQ8Xs+fTT1fj9Ih3DwQKT8PS+qfD6rJ0dRK0wgc/8/PCNbEpEeQ2tP1YCOa+rqikapu2PWHPbUpsP3kRa+/e5RtCPZvOuBFbAIw/lPc0vlr+jjZVNzTDM+WDtUEYPyneGAVERuJ6N/Z7TkBsUka2FhFAMZ/iit69UpHoqG+tnBZgUKvdEjFB0sCMH4DGFiVNlkhGIAiAOOXAChy/owsAqRyptEAJAEYf3ISgAxdBcCRDaBDNQEYvwZkbcMqZBAuGApgCBqQWADcjmOL5uYkgwaQ2ADpVwA2HCH3/mX7mAZCP9MARQC6QJIlHKDvjLRgV9N1eb5bCUiyRJcAOgDNeDcAhGz/W+yjpsoZ4J5kmY4AjN8AkCuzR59jLQGaAGSBzALM/OXIvO9a/9DcxWhRApgACqCFmVAxcX9XPpoZIFEA6ZcATEtjQkrhx7hid371lNe+bIAkAF2ArrIC9OP7VVeE2Qv2paLfKopDqBOTcc9gpksAHQBqQCuyjgRh1LO7PgcRBpHpKQBQRwAqAFQA4eGEvhu4/1HIOiivJQCqCEuAWHQ+5Y34iR9LrAj4ugSIBlABarGXh5f+Gb6Sgon7Cw2AsgMwASC8G4+e8ue1K6Q0QO9vA+DfXg14d7gouundNE09kKIwBAlAOsIJJEvAq8d8POn7jhQ5kyIsAAnQDZACNC3zS1uuJBESgHQHYAJIwPNu+ywxf24BoAtACjCV634RSAHQKqDiDy7jL6UMoWSLXG0BkHi04cK1G0SBxaMNbQE68XA9G++ZylDO4uHauQDjx3jafrwzicf7xDamJgC9iGz//+0FA3OCXEgQ2YCi+/yK02ELACPgJTYAk+n3l6yJ8J2pE3ggdAB0Cbu2emyoartcbCoFSELwnc0AebFYRL2QRT4DZN/0ZX8OyM0KGmmKC6Av/HufR1gAzucVggugRva+vztsAy5MvwD4qYdF4B0cgPErxAzAG/ADBwjCDcDlYhNWAGGgDl2qw18BooE6dNFTq7cGuFwcwgLg7axzb6g7fAbIBvbBkx19DybCbwAV4OAefdlE+B62IqwCVADsLQ7ftMY++A69fKOD1aD0wm/r+P8P714REZPx0v8AAAAASUVORK5CYII="
+    )
 
-def create_tray_icon():
-    """Decodes a base64 string and returns a 64x64 PIL Image for the system tray."""
-    # Decode the Base64 string to bytes
-    icon_base64 = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAAAgVBMVEVHcExoE+FnE+FnE+FnE+FmE+FrFuFiD+FoE+FfDeFxGuH///9kEeFyGuFnE+FtFuFhD+FvGOF1HOF+IuF4HuF7IOFqFeGCJeKGJ+KKKuLStfZfDeGxg++1h++9jfDbxPiBMeT28P2gZOv9+//t4fyNQOaXU+nk0/qqdu7NrvXAlvLOhlZVAAAAC3RSTlMA1ziQIQG07+VsbH0U4VAAAAP2SURBVFjDlZfpdqowAISDINjWsIQgLigBBYH3f8CbfWGpvfOj51QyHzOJEQKA0j74Cr0ovVGlG+LXIi/8CvZgrv3OP/ABm27DuN0O/m6GCPzo9ge7QUR+YPt33sJ+nGmBCHcL/6Z5ARE9dq7/k9tlMIcnCYHtP36UTRDz4K/bY0erKVKfrcUuUv4t8xKiQkS0xN6X/g/uGUMiaITg4PrjD3IIt0MAvpz4s7bL/uZf4fsC4cwek3aoNjS0JJ4hQuA5/pQ8Xs+fTT1fj9Ih3DwQKT8PS+qfD6rJ0dRK0wgc/8/PCNbEpEeQ2tP1YCOa+rqikapu2PWHPbUpsP3kRa+/e5RtCPZvOuBFbAIw/lPc0vlr+jjZVNzTDM+WDtUEYPyneGAVERuJ6N/Z7TkBsUka2FhFAMZ/iit69UpHoqG+tnBZgUKvdEjFB0sCMH4DGFiVNlkhGIAiAOOXAChy/owsAqRyptEAJAEYf3ISgAxdBcCRDaBDNQEYvwZkbcMqZBAuGApgCBqQWADcjmOL5uYkgwaQ2ADpVwA2HCH3/mX7mAZCP9MARQC6QJIlHKDvjLRgV9N1eb5bCUiyRJcAOgDNeDcAhGz/W+yjpsoZ4J5kmY4AjN8AkCuzR59jLQGaAGSBzALM/OXIvO9a/9DcxWhRApgACqCFmVAxcX9XPpoZIFEA6ZcATEtjQkrhx7hid371lNe+bIAkAF2ArrIC9OP7VVeE2Qv2paLfKopDqBOTcc9gpksAHQBqQCuyjgRh1LO7PgcRBpHpKQBQRwAqAFQA4eGEvhu4/1HIOiivJQCqCEuAWHQ+5Y34iR9LrAj4ugSIBlABarGXh5f+Gb6Sgon7Cw2AsgMwASC8G4+e8ue1K6Q0QO9vA+DfXg14d7gouundNE09kKIwBAlAOsIJJEvAq8d8POn7jhQ5kyIsAAnQDZACNC3zS1uuJBESgHQHYAJIwPNu+ywxf24BoAtACjCV634RSAHQKqDiDy7jL6UMoWSLXG0BkHi04cK1G0SBxaMNbQE68XA9G++ZylDO4uHauQDjx3jafrwzicf7xDamJgC9iGz//+0FA3OCXEgQ2YCi+/yK02ELACPgJTYAk+n3l6yJ8J2pE3ggdAB0Cbu2emyoartcbCoFSELwnc0AebFYRL2QRT4DZN/0ZX8OyM0KGmmKC6Av/HufR1gAzucVggugRva+vztsAy5MvwD4qYdF4B0cgPErxAzAG/ADBwjCDcDlYhNWAGGgDl2qw18BooE6dNFTq7cGuFwcwgLg7axzb6g7fAbIBvbBkx19DybCbwAV4OAefdlE+B62IqwCVADsLQ7ftMY++A69fKOD1aD0wm/r+P8P714REZPx0v8AAAAASUVORK5CYII="
-    image_data = base64.b64decode(icon_base64)
-    
-    # Load the image bytes into Pillow
-    image = Image.open(io.BytesIO(image_data))
-    
-    # Optional: Ensure it's scaled to 64x64 if necessary
-    if image.size != (64, 64):
-        image = image.resize((64, 64), Image.Resampling.LANCZOS)
-        
-    return image
+    try:
+        byte_array = QByteArray.fromBase64(icon_base64.encode("utf-8"))
+        pixmap = QPixmap()
+        if pixmap.loadFromData(byte_array) and not pixmap.isNull():
+            return QIcon(pixmap)
+    except Exception:
+        pass
+
+    # Fallback: Programmatically draw a solid blue 16x16 pixmap if Base64 fails
+    fallback_pixmap = QPixmap(16, 16)
+    fallback_pixmap.fill(QColor(0, 122, 255))
+    return QIcon(fallback_pixmap)
 
 
 def start_web_ui(host: str = "127.0.0.1", port: int = 5000, tray: bool = False) -> None:
     """Launches the Flask Web UI and opens the browser."""
-    # 1. Suppress HTTP request logs (GET, POST, 200, 404, etc.)
-    log = logging.getLogger('werkzeug')
-    log.setLevel(logging.ERROR)  # Or log.disabled = True to mute completely
+    # 1. Suppress HTTP request logs
+    log = logging.getLogger("werkzeug")
+    log.setLevel(logging.ERROR)
 
-    # 2. Suppress default Flask startup banner ("* Serving Flask app...")
+    # 2. Suppress default Flask startup banner
     cli.show_server_banner = lambda *_: None
     url = f"http://{host}:{port}"
 
@@ -862,27 +869,41 @@ def start_web_ui(host: str = "127.0.0.1", port: int = 5000, tray: bool = False) 
         app.run(host=host, port=port, debug=False)
         return
 
-    # System Tray execution
-    def on_open_ui(icon, item):
-        webbrowser.open(url)
+    # System Tray execution using PyQt6
+    app_qt = QApplication.instance() or QApplication(sys.argv)
+    app_qt.setQuitOnLastWindowClosed(False)
 
-    def on_quit(icon, item):
-        icon.stop()
-        os._exit(0)
+    menu = QMenu()
 
-    menu = pystray.Menu(
-        pystray.MenuItem("Open TermPaper UI", on_open_ui, default=True),
-        pystray.MenuItem("Quit", on_quit)
+    open_ui_action = menu.addAction("Open TermPaper UI")
+    open_ui_action.triggered.connect(lambda: webbrowser.open(url))
+
+    menu.addSeparator()
+
+    quit_action = menu.addAction("Quit")
+    quit_action.triggered.connect(app_qt.quit)
+
+    tray_icon = QSystemTrayIcon(create_tray_icon(), app_qt)
+    tray_icon.setToolTip("TermPaper Web UI")
+    tray_icon.setContextMenu(menu)
+
+    # Handle double click or single click to open UI
+    tray_icon.activated.connect(
+        lambda reason: (
+            webbrowser.open(url)
+            if reason == QSystemTrayIcon.ActivationReason.Trigger
+            else None
+        )
     )
 
-    icon = pystray.Icon("TermPaper", create_tray_icon(), "TermPaper Web UI", menu)
+    tray_icon.show()
 
     # Run Flask in a background daemon thread
     threading.Thread(
         target=app.run,
         kwargs={"host": host, "port": port, "debug": False, "use_reloader": False},
-        daemon=True
+        daemon=True,
     ).start()
 
     webbrowser.open(url)
-    icon.run()  # Holds the main thread for system tray events
+    sys.exit(app_qt.exec())

@@ -1,16 +1,17 @@
+import base64
 import os
 import platform
 import random
 import shutil
 import subprocess
+import sys
 import threading
 from pathlib import Path
 from typing import Any, Callable, List, Optional
-import pystray
-from PIL import Image, ImageDraw
-import base64
-import io
 
+from PyQt6.QtCore import QByteArray
+from PyQt6.QtGui import QColor, QIcon, QPixmap
+from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
@@ -26,7 +27,12 @@ def set_desktop_wallpaper(image_path: Path) -> bool:
     try:
         if sys_os == "Windows":
             import ctypes
-            return bool(ctypes.windll.user32.SystemParametersInfoW(20, 0, str(resolved_path), 3))
+
+            return bool(
+                ctypes.windll.user32.SystemParametersInfoW(
+                    20, 0, str(resolved_path), 3
+                )
+            )
 
         elif sys_os == "Darwin":  # macOS
             apple_script = f'tell application "System Events" to set picture of every desktop to "{resolved_path}"'
@@ -37,9 +43,29 @@ def set_desktop_wallpaper(image_path: Path) -> bool:
             desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
             file_uri = resolved_path.as_uri()
 
-            if any(de in desktop for de in ["gnome", "ubuntu", "cinnamon", "mate", "pop"]):
-                subprocess.run(["gsettings", "set", "org.gnome.desktop.background", "picture-uri", file_uri], check=True)
-                subprocess.run(["gsettings", "set", "org.gnome.desktop.background", "picture-uri-dark", file_uri], check=False)
+            if any(
+                de in desktop for de in ["gnome", "ubuntu", "cinnamon", "mate", "pop"]
+            ):
+                subprocess.run(
+                    [
+                        "gsettings",
+                        "set",
+                        "org.gnome.desktop.background",
+                        "picture-uri",
+                        file_uri,
+                    ],
+                    check=True,
+                )
+                subprocess.run(
+                    [
+                        "gsettings",
+                        "set",
+                        "org.gnome.desktop.background",
+                        "picture-uri-dark",
+                        file_uri,
+                    ],
+                    check=False,
+                )
                 return True
 
             if "kde" in desktop:
@@ -53,11 +79,41 @@ def set_desktop_wallpaper(image_path: Path) -> bool:
                 }}
                 """
                 subprocess.run(
-                    ["qdbus", "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.evaluateScript", js_script],
+                    [
+                        "qdbus",
+                        "org.kde.plasmashell",
+                        "/PlasmaShell",
+                        "org.kde.PlasmaShell.evaluateScript",
+                        js_script,
+                    ],
                     check=True,
                 )
                 return True
-
+            if "xfce" in desktop:
+                try:
+                    result = subprocess.run(
+                        ["xfconf-query", "-c", "xfce4-desktop", "-l"],
+                        stdout=subprocess.PIPE,
+                        text=True,
+                        check=True,
+                    )
+                    for prop in result.stdout.splitlines():
+                        if prop.endswith(("last-image", "image-path")):
+                            subprocess.run(
+                                [
+                                    "xfconf-query",
+                                    "-c",
+                                    "xfce4-desktop",
+                                    "-p",
+                                    prop,
+                                    "-s",
+                                    str(resolved_path),
+                                ],
+                                check=False,
+                            )
+                    return True
+                except Exception:
+                    pass
             if shutil.which("swww"):
                 subprocess.run(["swww", "img", str(resolved_path)], check=True)
                 return True
@@ -66,7 +122,16 @@ def set_desktop_wallpaper(image_path: Path) -> bool:
                 subprocess.run(["feh", "--bg-fill", str(resolved_path)], check=True)
                 return True
 
-            subprocess.run(["gsettings", "set", "org.gnome.desktop.background", "picture-uri", file_uri], check=True)
+            subprocess.run(
+                [
+                    "gsettings",
+                    "set",
+                    "org.gnome.desktop.background",
+                    "picture-uri",
+                    file_uri,
+                ],
+                check=True,
+            )
             return True
 
     except Exception:
@@ -79,30 +144,38 @@ def get_local_images(directory: Path) -> List[Path]:
     """Retrieves all supported image files from a directory."""
     if not directory.exists() or not directory.is_dir():
         return []
-    return sorted([
-        p for p in directory.iterdir()
-        if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
-    ])
+    return sorted(
+        [
+            p
+            for p in directory.iterdir()
+            if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
+        ]
+    )
 
 
-def create_tray_icon_image() -> Image.Image:
-    """Decodes a base64 string and returns a 64x64 PIL Image for the system tray."""
-    # Decode the Base64 string to bytes
-    icon_base64 = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAAAgVBMVEVHcExoE+FnE+FnE+FnE+FmE+FrFuFiD+FoE+FfDeFxGuH///9kEeFyGuFnE+FtFuFhD+FvGOF1HOF+IuF4HuF7IOFqFeGCJeKGJ+KKKuLStfZfDeGxg++1h++9jfDbxPiBMeT28P2gZOv9+//t4fyNQOaXU+nk0/qqdu7NrvXAlvLOhlZVAAAAC3RSTlMA1ziQIQG07+VsbH0U4VAAAAP2SURBVFjDlZfpdqowAISDINjWsIQgLigBBYH3f8CbfWGpvfOj51QyHzOJEQKA0j74Cr0ovVGlG+LXIi/8CvZgrv3OP/ABm27DuN0O/m6GCPzo9ge7QUR+YPt33sJ+nGmBCHcL/6Z5ARE9dq7/k9tlMIcnCYHtP36UTRDz4K/bY0erKVKfrcUuUv4t8xKiQkS0xN6X/g/uGUMiaITg4PrjD3IIt0MAvpz4s7bL/uZf4fsC4cwek3aoNjS0JJ4hQuA5/pQ8Xs+fTT1fj9Ih3DwQKT8PS+qfD6rJ0dRK0wgc/8/PCNbEpEeQ2tP1YCOa+rqikapu2PWHPbUpsP3kRa+/e5RtCPZvOuBFbAIw/lPc0vlr+jjZVNzTDM+WDtUEYPyneGAVERuJ6N/Z7TkBsUka2FhFAMZ/iit69UpHoqG+tnBZgUKvdEjFB0sCMH4DGFiVNlkhGIAiAOOXAChy/owsAqRyptEAJAEYf3ISgAxdBcCRDaBDNQEYvwZkbcMqZBAuGApgCBqQWADcjmOL5uYkgwaQ2ADpVwA2HCH3/mX7mAZCP9MARQC6QJIlHKDvjLRgV9N1eb5bCUiyRJcAOgDNeDcAhGz/W+yjpsoZ4J5kmY4AjN8AkCuzR59jLQGaAGSBzALM/OXIvO9a/9DcxWhRApgACqCFmVAxcX9XPpoZIFEA6ZcATEtjQkrhx7hid371lNe+bIAkAF2ArrIC9OP7VVeE2Qv2paLfKopDqBOTcc9gpksAHQBqQCuyjgRh1LO7PgcRBpHpKQBQRwAqAFQA4eGEvhu4/1HIOiivJQCqCEuAWHQ+5Y34iR9LrAj4ugSIBlABarGXh5f+Gb6Sgon7Cw2AsgMwASC8G4+e8ue1K6Q0QO9vA+DfXg14d7gouundNE09kKIwBAlAOsIJJEvAq8d8POn7jhQ5kyIsAAnQDZACNC3zS1uuJBESgHQHYAJIwPNu+ywxf24BoAtACjCV634RSAHQKqDiDy7jL6UMoWSLXG0BkHi04cK1G0SBxaMNbQE68XA9G++ZylDO4uHauQDjx3jafrwzicf7xDamJgC9iGz//+0FA3OCXEgQ2YCi+/yK02ELACPgJTYAk+n3l6yJ8J2pE3ggdAB0Cbu2emyoartcbCoFSELwnc0AebFYRL2QRT4DZN/0ZX8OyM0KGmmKC6Av/HufR1gAzucVggugRva+vztsAy5MvwD4qYdF4B0cgPErxAzAG/ADBwjCDcDlYhNWAGGgDl2qw18BooE6dNFTq7cGuFwcwgLg7axzb6g7fAbIBvbBkx19DybCbwAV4OAefdlE+B62IqwCVADsLQ7ftMY++A69fKOD1aD0wm/r+P8P714REZPx0v8AAAAASUVORK5CYII="
-    image_data = base64.b64decode(icon_base64)
-    
-    # Load the image bytes into Pillow
-    image = Image.open(io.BytesIO(image_data))
-    
-    # Optional: Ensure it's scaled to 64x64 if necessary
-    if image.size != (64, 64):
-        image = image.resize((64, 64), Image.Resampling.LANCZOS)
-        
-    return image
+def create_tray_icon() -> QIcon:
+    """Decodes a clean Base64 string into a QIcon, falling back to a drawn icon if decoding fails."""
+    # Valid 16x16 PNG icon
+    icon_base64 = (
+        "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAAAgVBMVEVHcExoE+FnE+FnE+FnE+FmE+FrFuFiD+FoE+FfDeFxGuH///9kEeFyGuFnE+FtFuFhD+FvGOF1HOF+IuF4HuF7IOFqFeGCJeKGJ+KKKuLStfZfDeGxg++1h++9jfDbxPiBMeT28P2gZOv9+//t4fyNQOaXU+nk0/qqdu7NrvXAlvLOhlZVAAAAC3RSTlMA1ziQIQG07+VsbH0U4VAAAAP2SURBVFjDlZfpdqowAISDINjWsIQgLigBBYH3f8CbfWGpvfOj51QyHzOJEQKA0j74Cr0ovVGlG+LXIi/8CvZgrv3OP/ABm27DuN0O/m6GCPzo9ge7QUR+YPt33sJ+nGmBCHcL/6Z5ARE9dq7/k9tlMIcnCYHtP36UTRDz4K/bY0erKVKfrcUuUv4t8xKiQkS0xN6X/g/uGUMiaITg4PrjD3IIt0MAvpz4s7bL/uZf4fsC4cwek3aoNjS0JJ4hQuA5/pQ8Xs+fTT1fj9Ih3DwQKT8PS+qfD6rJ0dRK0wgc/8/PCNbEpEeQ2tP1YCOa+rqikapu2PWHPbUpsP3kRa+/e5RtCPZvOuBFbAIw/lPc0vlr+jjZVNzTDM+WDtUEYPyneGAVERuJ6N/Z7TkBsUka2FhFAMZ/iit69UpHoqG+tnBZgUKvdEjFB0sCMH4DGFiVNlkhGIAiAOOXAChy/owsAqRyptEAJAEYf3ISgAxdBcCRDaBDNQEYvwZkbcMqZBAuGApgCBqQWADcjmOL5uYkgwaQ2ADpVwA2HCH3/mX7mAZCP9MARQC6QJIlHKDvjLRgV9N1eb5bCUiyRJcAOgDNeDcAhGz/W+yjpsoZ4J5kmY4AjN8AkCuzR59jLQGaAGSBzALM/OXIvO9a/9DcxWhRApgACqCFmVAxcX9XPpoZIFEA6ZcATEtjQkrhx7hid371lNe+bIAkAF2ArrIC9OP7VVeE2Qv2paLfKopDqBOTcc9gpksAHQBqQCuyjgRh1LO7PgcRBpHpKQBQRwAqAFQA4eGEvhu4/1HIOiivJQCqCEuAWHQ+5Y34iR9LrAj4ugSIBlABarGXh5f+Gb6Sgon7Cw2AsgMwASC8G4+e8ue1K6Q0QO9vA+DfXg14d7gouundNE09kKIwBAlAOsIJJEvAq8d8POn7jhQ5kyIsAAnQDZACNC3zS1uuJBESgHQHYAJIwPNu+ywxf24BoAtACjCV634RSAHQKqDiDy7jL6UMoWSLXG0BkHi04cK1G0SBxaMNbQE68XA9G++ZylDO4uHauQDjx3jafrwzicf7xDamJgC9iGz//+0FA3OCXEgQ2YCi+/yK02ELACPgJTYAk+n3l6yJ8J2pE3ggdAB0Cbu2emyoartcbCoFSELwnc0AebFYRL2QRT4DZN/0ZX8OyM0KGmmKC6Av/HufR1gAzucVggugRva+vztsAy5MvwD4qYdF4B0cgPErxAzAG/ADBwjCDcDlYhNWAGGgDl2qw18BooE6dNFTq7cGuFwcwgLg7axzb6g7fAbIBvbBkx19DybCbwAV4OAefdlE+B62IqwCVADsLQ7ftMY++A69fKOD1aD0wm/r+P8P714REZPx0v8AAAAASUVORK5CYII="
+    )
+
+    try:
+        byte_array = QByteArray.fromBase64(icon_base64.encode("utf-8"))
+        pixmap = QPixmap()
+        if pixmap.loadFromData(byte_array) and not pixmap.isNull():
+            return QIcon(pixmap)
+    except Exception:
+        pass
+
+    # Fallback: Programmatically draw a solid blue 16x16 pixmap
+    fallback_pixmap = QPixmap(16, 16)
+    fallback_pixmap.fill(QColor(0, 122, 255))
+    return QIcon(fallback_pixmap)
 
 
 class WallpaperRotator:
-    """Thread-safe background wallpaper rotation manager with Tray controls."""
+    """Thread-safe background wallpaper rotation manager with PyQt6 Tray controls."""
 
     def __init__(
         self,
@@ -126,7 +199,9 @@ class WallpaperRotator:
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._step_event = threading.Event()
-        self._tray_icon: Optional[pystray.Icon] = None # pyright: ignore[reportInvalidTypeForm]
+
+        self._app: Optional[QApplication] = None
+        self._tray_icon: Optional[QSystemTrayIcon] = None
 
     def _apply_wallpaper(self, index: int) -> bool:
         if not self.images:
@@ -142,10 +217,10 @@ class WallpaperRotator:
         return False
 
     def next_wallpaper(self) -> None:
-            """Switch to the next wallpaper immediately."""
-            if self.images:
-                self.current_index = (self.current_index + 1) % len(self.images)
-                self._step_event.set()
+        """Switch to the next wallpaper immediately."""
+        if self.images:
+            self.current_index = (self.current_index + 1) % len(self.images)
+            self._step_event.set()
 
     def previous_wallpaper(self) -> None:
         """Switch to the previous wallpaper immediately."""
@@ -174,11 +249,9 @@ class WallpaperRotator:
                 if not self.loop and self.current_index == len(self.images) - 1:
                     break
 
-            # Wait for interval duration, unblocking instantly on stop or manual skip
             signaled = self._step_event.wait(timeout=self.interval)
             self._step_event.clear()
 
-            # Advance index on normal timer expiration (not triggered by manual skip/pause)
             if not signaled and not self.is_paused:
                 self.current_index = (self.current_index + 1) % len(self.images)
 
@@ -199,8 +272,11 @@ class WallpaperRotator:
         self._step_event.set()
 
         if self._tray_icon is not None:
-            self._tray_icon.stop()
+            self._tray_icon.hide()
             self._tray_icon = None
+
+        if self._app is not None:
+            self._app.quit()
 
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=2.0)
@@ -213,25 +289,36 @@ class WallpaperRotator:
         """Starts the rotator and attaches system tray controls (blocking main thread)."""
         self.start()
 
-        def get_pause_label(item: Any) -> str:
-            return "Resume" if self.is_paused else "Pause"
+        self._app = QApplication.instance() or QApplication(sys.argv)
+        self._app.setQuitOnLastWindowClosed(False)
 
-        menu = pystray.Menu(
-            pystray.MenuItem(get_pause_label, lambda icon, item: self.toggle_pause()),
-            pystray.MenuItem("Next Wallpaper", lambda icon, item: self.next_wallpaper()),
-            pystray.MenuItem("Previous Wallpaper", lambda icon, item: self.previous_wallpaper()),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Exit", lambda icon, item: self.stop()),
-        )
+        menu = QMenu()
 
-        icon = pystray.Icon(
-            "TermPaper",
-            create_tray_icon_image(),
-            "TermPaper Rotator",
-            menu=menu,
-        )
-        self._tray_icon = icon
-        icon.run()
+        pause_action = menu.addAction("Pause")
+        pause_action.triggered.connect(self.toggle_pause)
+
+        def update_pause_label():
+            pause_action.setText("Resume" if self.is_paused else "Pause")
+
+        menu.aboutToShow.connect(update_pause_label)
+
+        next_action = menu.addAction("Next Wallpaper")
+        next_action.triggered.connect(self.next_wallpaper)
+
+        prev_action = menu.addAction("Previous Wallpaper")
+        prev_action.triggered.connect(self.previous_wallpaper)
+
+        menu.addSeparator()
+
+        exit_action = menu.addAction("Exit")
+        exit_action.triggered.connect(self.stop)
+
+        self._tray_icon = QSystemTrayIcon(create_tray_icon(), self._app)
+        self._tray_icon.setToolTip("TermPaper Rotator")
+        self._tray_icon.setContextMenu(menu)
+        self._tray_icon.show()
+
+        sys.exit(self._app.exec())
 
     def get_status(self) -> dict[str, Any]:
         """Returns status representation."""
@@ -240,5 +327,7 @@ class WallpaperRotator:
             "is_paused": self.is_paused,
             "interval": self.interval,
             "folder": str(self.folder_path.resolve()),
-            "current_image": str(self.current_image.resolve()) if self.current_image else None,
+            "current_image": str(self.current_image.resolve())
+            if self.current_image
+            else None,
         }
